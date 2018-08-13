@@ -12,8 +12,8 @@ var app = express ();
 var con = mysql.createPool({
   host: "localhost",
   user: "root",
-  password: "roy100",
-  database: "mydb"
+  password: "password",
+  database: "my_db"
 });
 
 app.set("views", path.resolve(__dirname, "views"));
@@ -42,9 +42,13 @@ app.post("/new-entry", function(request, response){
         username = request.body.username,
         password = bcrypt.hashSync(request.body.password, 10),
         created = new Date()
-        insertDetails();
-        request.session.user = username;
-    response.redirect("/welcome");
+        getId(username, password, created)
+            .then(result => {
+                request.session.userid = result
+                response.redirect('/welcome');
+            }).catch( e => {
+                console.log(e);
+            })
 })
 
 app.get("/login", function(request, response){
@@ -61,7 +65,7 @@ app.post("/login", function(request, response){
         var hash = result[0].password;
         var user = result[0].username;
           if (bcrypt.compareSync(password, hash) == true) {
-            request.session.user = user
+            request.session.userid = user
             response.redirect("/welcome");
           } else {
             response.render('login', {message: "Wrong Password"})
@@ -69,20 +73,20 @@ app.post("/login", function(request, response){
         });
 })
 
+app.get("/logout", function(request, response){
+    request.session.destroy();
+    console.log(request.session);
+    response.redirect('/login');
+})
+
 app.get("/welcome", function(request, response){
-    if (request.session.user) {
+    console.log(request.session.userid)
+    if (request.session.userid) {
       response.render("welcome", {name: request.session.user})
     }
     else {
       response.redirect('/login')
     }
-})
-
-app.get("/logout", function(request, response){
-    request.session.destroy(function(request, result){
-      console.log("user logged out.")
-    })
-    response.redirect('/login');
 })
 
 app.use(function(request, response){
@@ -95,13 +99,26 @@ http.createServer(app).listen(3000, function(){
 
 
 
-function insertDetails() {
-    var sql = "INSERT INTO users (username, password, create_date) VALUES ?";
-    var values = [
-      [username, password, created]
-    ]
-		con.query(sql, [values], function (err, result) {
-    var id = result.insertId;
-		if (err) throw err;
-		});
+function insertDetails(username, password, created) {
+    return new Promise(function(resolve,reject) {
+        var sql = "INSERT INTO users (username, password, create_date) VALUES ?";
+        var values = [
+        [username, password, created]
+        ]
+        con.query(sql, [values], function (err, result) {
+            if (err) {
+                reject(err);
+            };
+            resolve(result.insertId)
+        })
+    });
 };
+
+async function getId(username, password, created) {
+    try {
+        result = await insertDetails(username, password, created)
+        return result;
+    } catch (err) {
+        throw err
+    }
+}
